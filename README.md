@@ -1,4 +1,4 @@
-# 💽 System Clearer — macOS Disk Space Manager
+# 💽 Unfuck-your-mac-disk: macOS Disk Space Manager
 
 A full-stack local app that hunts down the **deletable junk buried in macOS
 "System Data"** — the opaque bucket traditional tools (and Finder) can't break
