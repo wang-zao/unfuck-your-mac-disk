@@ -1,0 +1,23 @@
+# Python
+.venv/
+pylibs/
+__pycache__/
+*.pyc
+
+# Node (used only for the headless UI test)
+node_modules/
+package.json
+package-lock.json
+
+# Runtime data & state
+data/system_clearer.db
+data/system_clearer.db-wal
+data/system_clearer.db-shm
+data/quarantine/
+data/server.log
+data/token.txt
+data/shots/
+data/uitest.js
+
+# macOS
+.DS_Store

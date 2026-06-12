@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Clearer — Disk Space Manager</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%BD%3C/text%3E%3C/svg%3E" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: {
+        ink: '#0b1020', panel: '#0f172a',
+        brand: { 400:'#818cf8', 500:'#6366f1', 600:'#4f46e5' },
+        accent: { cyan:'#22d3ee', violet:'#8b5cf6' }
+      }, fontFamily: { sans: ['-apple-system','BlinkMacSystemFont','Segoe UI','Inter','sans-serif'] } } }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="bg-ink text-slate-200 font-sans antialiased min-h-screen">
+
+  <!-- ===================== AUTH SCREEN ===================== -->
+  <div id="auth-screen" class="fixed inset-0 z-50 flex items-center justify-center p-6 hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-ink via-[#0d1326] to-[#15092b]"></div>
+    <div class="absolute inset-0 opacity-40 bg-grid"></div>
+    <div class="relative glass w-full max-w-md rounded-3xl p-8 shadow-2xl">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="logo-badge">💽</div>
+        <div>
+          <h1 class="text-xl font-bold text-white">System Clearer</h1>
+          <p class="text-xs text-slate-400">Reclaim your “System Data” space</p>
+        </div>
+      </div>
+      <p id="auth-mode-text" class="text-sm text-slate-300 mb-4"></p>
+      <form id="auth-form" class="space-y-4">
+        <div>
+          <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1">Access PIN</label>
+          <input id="auth-pin" type="password" inputmode="numeric" autocomplete="off"
+                 class="field" placeholder="••••" minlength="4" required />
+        </div>
+        <div id="auth-pin2-wrap" class="hidden">
+          <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1">Confirm PIN</label>
+          <input id="auth-pin2" type="password" autocomplete="off" class="field" placeholder="••••" />
+        </div>
+        <p id="auth-error" class="text-sm text-rose-400 hidden"></p>
+        <button type="submit" class="btn-primary w-full justify-center" id="auth-submit">Unlock</button>
+      </form>
+      <p class="mt-5 text-[11px] leading-relaxed text-slate-500">
+        A local PIN gates this tool because it can permanently delete files.
+        It never leaves your Mac.
+      </p>
+    </div>
+  </div>
+
+  <!-- ===================== MAIN APP ===================== -->
+  <div id="app" class="hidden">
+    <div class="flex min-h-screen">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="flex items-center gap-2 px-2 py-1 mb-6">
+          <div class="logo-badge text-lg">💽</div>
+          <div class="leading-tight">
+            <div class="font-bold text-white text-sm">System Clearer</div>
+            <div class="text-[10px] text-slate-500">disk space manager</div>
+          </div>
+        </div>
+        <nav class="space-y-1" id="nav">
+          <button class="nav-item active" data-view="dashboard"><span>📊</span>Dashboard</button>
+          <button class="nav-item" data-view="visualize"><span>🌳</span>Visualize</button>
+          <button class="nav-item" data-view="items"><span>📁</span>Items &amp; AI</button>
+          <button class="nav-item" data-view="cleanup"><span>🧹</span>Cleanup Log</button>
+          <button class="nav-item" data-view="settings"><span>⚙️</span>Settings</button>
+        </nav>
+        <div class="mt-auto pt-6 space-y-3">
+          <div id="mini-disk" class="mini-disk"></div>
+          <button id="logout-btn" class="nav-item w-full text-slate-400"><span>🔒</span>Lock</button>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="flex-1 min-w-0">
+        <!-- Topbar -->
+        <header class="topbar">
+          <div>
+            <h2 id="view-title" class="text-lg font-semibold text-white">Dashboard</h2>
+            <p id="view-sub" class="text-xs text-slate-400">Overview of your disk and reclaimable space</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="scan-pill" class="scan-pill hidden"></div>
+            <select id="scan-mode" class="field-sm w-auto">
+              <option value="system_data">System Data targets</option>
+              <option value="path">Custom path…</option>
+            </select>
+            <button id="scan-btn" class="btn-primary"><span>⚡</span> Scan</button>
+          </div>
+        </header>
+
+        <div class="p-6 space-y-6">
+
+          <!-- ===== DASHBOARD ===== -->
+          <section data-section="dashboard" class="space-y-6">
+            <!-- progress -->
+            <div id="scan-progress" class="glass rounded-2xl p-4 hidden">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-white">Scanning…</span>
+                <button id="scan-cancel" class="text-xs text-rose-400 hover:underline">Cancel</button>
+              </div>
+              <div class="progress"><div id="scan-bar" class="progress-fill" style="width:0%"></div></div>
+              <div id="scan-detail" class="mt-2 text-[11px] text-slate-400 truncate"></div>
+            </div>
+
+            <!-- stat cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="stat-cards"></div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div class="glass rounded-2xl p-5 lg:col-span-1">
+                <h3 class="card-title">Startup Disk</h3>
+                <div id="disk-gauge" class="chart h-56"></div>
+                <div id="disk-volumes" class="mt-2 space-y-2"></div>
+              </div>
+              <div class="glass rounded-2xl p-5 lg:col-span-2">
+                <div class="flex items-center justify-between">
+                  <h3 class="card-title">Reclaimable by Category</h3>
+                  <span id="donut-total" class="text-xs text-slate-400"></span>
+                </div>
+                <div id="cat-donut" class="chart h-72"></div>
+              </div>
+            </div>
+
+            <!-- target picker -->
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="card-title">Scan Targets <span class="text-slate-500 font-normal">(macOS “System Data” hot-spots)</span></h3>
+                <div class="flex gap-2">
+                  <button id="targets-all" class="btn-ghost text-xs">Select all</button>
+                  <button id="targets-default" class="btn-ghost text-xs">Defaults</button>
+                </div>
+              </div>
+              <div id="targets-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+            </div>
+          </section>
+
+          <!-- ===== VISUALIZE ===== -->
+          <section data-section="visualize" class="hidden space-y-4">
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="card-title">Disk Tree</h3>
+                <div class="flex gap-2" id="viz-toggle">
+                  <button class="chip active" data-viz="treemap">Treemap</button>
+                  <button class="chip" data-viz="sunburst">Sunburst</button>
+                </div>
+              </div>
+              <div id="tree-chart" class="chart" style="height:600px"></div>
+              <p class="text-[11px] text-slate-500 mt-2">Click a block to drill in. Size = actual disk space used.</p>
+            </div>
+          </section>
+
+          <!-- ===== ITEMS ===== -->
+          <section data-section="items" class="hidden space-y-4">
+            <div class="glass rounded-2xl p-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <select id="item-cat" class="field-sm w-auto"><option value="">All categories</option></select>
+                <label class="flex items-center gap-2 text-xs text-slate-400">
+                  <input type="checkbox" id="item-dirs" checked class="accent-brand-500" /> Folders only
+                </label>
+                <div class="flex-1"></div>
+                <button id="analyze-btn" class="btn-primary text-sm"><span>🤖</span> Analyze with GPT‑5</button>
+                <select id="del-method" class="field-sm w-auto">
+                  <option value="trash">→ Trash (reversible)</option>
+                  <option value="quarantine">→ Quarantine</option>
+                  <option value="permanent">Delete permanently</option>
+                </select>
+                <button id="delete-btn" class="btn-danger text-sm"><span>🗑️</span> Clean selected</button>
+              </div>
+              <div id="items-meta" class="mt-2 text-[11px] text-slate-500"></div>
+            </div>
+            <div class="glass rounded-2xl overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm" id="items-table">
+                  <thead>
+                    <tr class="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-white/5">
+                      <th class="p-3 w-8"><input type="checkbox" id="check-all" class="accent-brand-500" /></th>
+                      <th class="p-3">Item</th>
+                      <th class="p-3 w-28">Category</th>
+                      <th class="p-3 w-24 text-right">Size</th>
+                      <th class="p-3 w-20 text-center">Safe?</th>
+                      <th class="p-3 w-24">Risk</th>
+                      <th class="p-3 w-16"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="items-body"></tbody>
+                </table>
+              </div>
+              <div id="items-empty" class="p-10 text-center text-slate-500 text-sm">Run a scan to list items.</div>
+            </div>
+          </section>
+
+          <!-- ===== CLEANUP ===== -->
+          <section data-section="cleanup" class="hidden space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="cleanup-stats"></div>
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="card-title">Deletion History</h3>
+                <button id="empty-quar" class="btn-ghost text-xs text-rose-300">Empty quarantine</button>
+              </div>
+              <div id="deletions-list" class="space-y-2"></div>
+            </div>
+          </section>
+
+          <!-- ===== SETTINGS ===== -->
+          <section data-section="settings" class="hidden space-y-4 max-w-2xl">
+            <div class="glass rounded-2xl p-5 space-y-4">
+              <h3 class="card-title">OpenAI / GPT‑5</h3>
+              <div>
+                <label class="lbl">API Key</label>
+                <input id="set-key" type="password" class="field" placeholder="sk-..." />
+                <p id="key-status" class="text-[11px] text-slate-500 mt-1"></p>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="lbl">Model</label>
+                  <input id="set-model" class="field" placeholder="gpt-5" />
+                </div>
+                <div>
+                  <label class="lbl">Base URL (optional)</label>
+                  <input id="set-base" class="field" placeholder="https://api.openai.com/v1" />
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button id="save-openai" class="btn-primary text-sm">Save</button>
+                <button id="test-openai" class="btn-ghost text-sm">Test connection</button>
+                <span id="openai-test-result" class="text-xs self-center"></span>
+              </div>
+            </div>
+
+            <div class="glass rounded-2xl p-5 space-y-4">
+              <h3 class="card-title">Scan Tuning</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="lbl">Max depth</label><input id="set-depth" type="number" class="field" /></div>
+                <div><label class="lbl">Largest files kept</label><input id="set-largest" type="number" class="field" /></div>
+                <div><label class="lbl">Min item size (MB)</label><input id="set-min" type="number" class="field" /></div>
+                <div><label class="lbl">Default delete method</label>
+                  <select id="set-method" class="field">
+                    <option value="trash">Trash</option><option value="quarantine">Quarantine</option>
+                    <option value="permanent">Permanent</option>
+                  </select>
+                </div>
+              </div>
+              <button id="save-scan" class="btn-primary text-sm">Save</button>
+            </div>
+
+            <div class="glass rounded-2xl p-5 space-y-3">
+              <h3 class="card-title">Change PIN</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <input id="old-pin" type="password" class="field" placeholder="Current PIN" />
+                <input id="new-pin" type="password" class="field" placeholder="New PIN" />
+              </div>
+              <button id="save-pin" class="btn-ghost text-sm">Update PIN</button>
+              <span id="pin-result" class="text-xs"></span>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Detail drawer -->
+  <div id="drawer" class="drawer hidden">
+    <div class="drawer-backdrop" data-close-drawer></div>
+    <div class="drawer-panel">
+      <div class="flex items-start justify-between mb-4">
+        <h3 class="text-base font-semibold text-white pr-6" id="drawer-title">Item</h3>
+        <button class="text-slate-400 hover:text-white" data-close-drawer>✕</button>
+      </div>
+      <div id="drawer-body" class="space-y-4 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
